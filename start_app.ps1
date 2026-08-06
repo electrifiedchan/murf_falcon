@@ -1,4 +1,5 @@
 $ErrorActionPreference = "Stop"
+$env:Path = "C:\Users\user\.local\bin;$env:Path"
 
 function Test-CommandExists {
   param([string]$CommandName)
