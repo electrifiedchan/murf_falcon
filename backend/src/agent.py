@@ -1,3 +1,4 @@
+import json
 import logging
 
 from dotenv import load_dotenv
@@ -9,11 +10,15 @@ from livekit.agents import (
     JobContext,
     JobProcess,
     cli,
+    function_tool,
+    llm,
     room_io,
     tokenize,
 )
 from livekit.plugins import deepgram, google, murf, noise_cancellation, silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
+
+import db
 
 logger = logging.getLogger("agent")
 
@@ -32,9 +37,16 @@ KNOWLEDGE:
 - Expert in spoken English, conversational vocabulary, and daily topics (family, school, work, hobbies).
 - Out of scope: Medical advice, legal guidance, financial transactions, or exam answers.
 
-LANGUAGE & REGISTER:
-- Speak in clear, warm Indian English.
-- Code-mixed / Hinglish support: If the user mixes Hindi and English (Hinglish), understand them seamlessly and reply in matching warm, simple Indian English.
+MEMORY INSTRUCTIONS (CRITICAL):
+- When a user interacts with you, use the `lookup_caller` tool with their name to lookup past facts. 
+- If they are a returning caller, warmly welcome them back by name and briefly mention a past topic to show you remember them. 
+- During conversation, if you learn new facts about the user's English level, topics covered, or mistakes they keep making, YOU MUST ASK PERMISSION FIRST before saving it (e.g. "Can I remember that for next time?").
+- ONLY IF they say YES, use the `save_caller_info` tool to save their details. Do NOT save if they refuse or haven't explicitly agreed.
+
+LANGUAGE & SCRIPT:
+Always write every language in its own native script.
+- Hindi → Devanagari (नमस्ते), never romanized (never "namaste").
+- Same rule for all non-English languages.
 
 GUARDRAILS:
 1. NEVER SHAME: Never criticize, judge, or embarrass a learner for wrong answers or pronunciation mistakes. Always praise effort enthusiastically.
@@ -50,12 +62,53 @@ class Assistant(Agent):
     def __init__(self) -> None:
         super().__init__(instructions=SYSTEM_PROMPT)
 
+    @function_tool(
+        description="Lookup a caller's past interactions and facts by name"
+    )
+    async def lookup_caller(self, name: str) -> str:
+        record = db.lookup_caller(name)
+        if record:
+            return (
+                f"Found caller! Name: {record['name']}, "
+                f"Facts: {json.dumps(record['facts'])}, "
+                f"Last Interaction: {record['last_interaction']}"
+            )
+        return "Caller not found."
+
+    @function_tool(
+        description="Save interesting facts about a caller. ALWAYS ask permission from the user before using this!"
+    )
+    async def save_caller_info(
+        self,
+        name: str,
+        current_level: str,
+        topics: str,
+        mistakes: str,
+    ) -> str:
+        facts = {
+            "current_level": current_level,
+            "topics": topics,
+            "mistakes": mistakes,
+        }
+        db.save_caller(name, facts, language_preference="English")
+        return "Caller info saved successfully."
+
+    @function_tool(
+        description="Forget all details about a caller if they request it."
+    )
+    async def forget_caller(self, name: str) -> str:
+        deleted = db.forget_caller(name)
+        if deleted:
+            return f"All records for {name} have been deleted."
+        return f"No records found for {name}."
+
 
 server = AgentServer()
 
 
 def prewarm(proc: JobProcess):
     proc.userdata["vad"] = silero.VAD.load()
+    db.init_db()
 
 
 server.setup_fnc = prewarm
@@ -115,9 +168,9 @@ async def my_agent(ctx: JobContext):
     # Join the room and connect to the user
     await ctx.connect()
 
-    # First-turn greeting (Day 2 requirement)
+    # First-turn greeting that triggers the user to say their name so the agent can look them up
     await session.say(
-        "Namaste! I am Shiksha AI, your spoken English buddy. What would you like to practice speaking today?"
+        "Namaste! I am Shiksha AI, your spoken English buddy. To get started, what is your name?"
     )
 
 
