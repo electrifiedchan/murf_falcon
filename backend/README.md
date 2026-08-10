@@ -10,6 +10,9 @@ User speaks → [Deepgram STT] → text → [Gemini LLM] → response → [Murf 
 
 LiveKit handles the real-time audio transport. The agent connects to LiveKit as a participant, listens for user speech, and responds with synthesized audio.
 
+## Day 5: External Tools Integration
+This agent now implements a live internet lookup utilizing a fast, free public API: `api.dictionaryapi.dev`. This supports the Learning & Literacy track by allowing the agent to fetch realtime definitions of English words requested by users, while elegantly handling potential API timeouts natively.
+
 ## Setup
 
 ### 1. Install dependencies
