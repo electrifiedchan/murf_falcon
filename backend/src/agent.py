@@ -1,7 +1,10 @@
+import asyncio
 import json
 import logging
+import os
 
 from dotenv import load_dotenv
+from livekit import api as lk_api
 from livekit import rtc
 from livekit.agents import (
     Agent,
@@ -313,29 +316,82 @@ async def my_agent(ctx: JobContext):
         except Exception as err:
             logger.warning(f"Data packet parse error: {err}")
 
-    # Dynamic Conditional Memory Greeting: Check SQLite for existing memory profiles
-    profiles = db.get_all_user_profiles()
-    if len(profiles) >= 1:
-        names = [p["name"] for p in profiles if p.get("name")]
-        if len(names) == 1:
-            greeting = (
-                f"Namaste! Welcome back to Shiksha AI. "
-                f"Are you {names[0]}, or is someone new practicing today?"
-            )
-        else:
-            names_str = ", ".join(names[:-1]) + " or " + names[-1]
-            greeting = (
-                f"Namaste! Welcome back to Shiksha AI. "
-                f"Who is practicing today? ({names_str}, or someone new?)"
-            )
-    else:
-        # Default greeting when DB has no saved profiles (never ask for name upfront!)
-        greeting = (
-            "Namaste! I am Shiksha AI, your spoken English buddy. "
-            "What would you like to practice speaking today?"
-        )
+    # Outbound metadata extraction
+    job_metadata = getattr(ctx.job, "metadata", "")
+    phone_number = None
+    if job_metadata:
+        try:
+            parsed = json.loads(job_metadata)
+            phone_number = parsed.get("phone_number")
+        except json.JSONDecodeError:
+            pass
 
-    await session.say(greeting)
+    if phone_number:
+        # OUTBOUND CALL FLOW (DAY 6)
+        trunk_id = os.environ.get("LIVEKIT_SIP_OUTBOUND_TRUNK_ID")
+        if not trunk_id:
+            logger.error("LIVEKIT_SIP_OUTBOUND_TRUNK_ID not set! Cannot dial.")
+            return
+
+        logger.info(f"Dialing {phone_number} on SIP trunk {trunk_id}...")
+        lk = lk_api.LiveKitAPI(
+            url=os.environ.get("LIVEKIT_URL"),
+            api_key=os.environ.get("LIVEKIT_API_KEY"),
+            api_secret=os.environ.get("LIVEKIT_API_SECRET"),
+        )
+        try:
+            await lk.sip.create_sip_participant(
+                lk_api.CreateSIPParticipantRequest(
+                    sip_trunk_id=trunk_id,
+                    sip_call_to=phone_number,
+                    room_name=ctx.room.name,
+                    participant_identity="learner-phone",
+                    wait_until_answered=True
+                )
+            )
+            logger.info("Outbound call answered!")
+        except Exception as e:
+            logger.error(f"Outbound dial failed: {e}")
+            return
+        finally:
+            await lk.aclose()
+
+        # Wait a tiny bit for track routing to settle
+        await asyncio.sleep(1.0)
+        
+        # Day 6 Mandatory Opening 
+        greeting = (
+            "Hello, this is Shiksha AI calling for your daily English practice. "
+            "If you would like me to stop calling you in the future, just let me know. "
+            "Otherwise, are you ready to begin our practice?"
+        )
+        await session.say(greeting, allow_interruptions=False)
+        
+    else:
+        # INBOUND/WEB BROWSER FLOW
+        # Dynamic Conditional Memory Greeting: Check SQLite for existing memory profiles
+        profiles = db.get_all_user_profiles()
+        if len(profiles) >= 1:
+            names = [p["name"] for p in profiles if p.get("name")]
+            if len(names) == 1:
+                greeting = (
+                    f"Namaste! Welcome back to Shiksha AI. "
+                    f"Are you {names[0]}, or is someone new practicing today?"
+                )
+            else:
+                names_str = ", ".join(names[:-1]) + " or " + names[-1]
+                greeting = (
+                    f"Namaste! Welcome back to Shiksha AI. "
+                    f"Who is practicing today? ({names_str}, or someone new?)"
+                )
+        else:
+            # Default greeting when DB has no saved profiles (never ask for name upfront!)
+            greeting = (
+                "Namaste! I am Shiksha AI, your spoken English buddy. "
+                "What would you like to practice speaking today?"
+            )
+
+        await session.say(greeting)
 
 
 if __name__ == "__main__":
