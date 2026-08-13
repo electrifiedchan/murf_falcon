@@ -98,13 +98,24 @@ CONVERSATION FLOW & DURATION:
 
 STYLE FOR SPEECH:
 - Keep responses short, concise, and natural (1 to 2 short sentences per turn, maximum 20 words per sentence).
-- Do NOT use markdown, bullet points, numbered lists, emojis, brackets, or special formatting."""
+- Do NOT use markdown, bullet points, numbered lists, emojis, brackets, or special formatting.
+
+RECORDING SUCCESS (DAY 8):
+- If the learner successfully completes their practice, answers questions well, or finishes the requested topics, you MUST call `mark_exercise_completed` to log the successful outcome before wrapping up."""
 
 
 class Assistant(Agent):
     def __init__(self, room: rtc.Room | None = None) -> None:
         super().__init__(instructions=SYSTEM_PROMPT)
         self.room = room
+        self.successful_call = False
+
+    @function_tool
+    async def mark_exercise_completed(self, context: RunContext) -> str:
+        """Call this tool when the learner has successfully completed their English practice session."""
+        self.successful_call = True
+        logger.info("[Day 8] AI marked this session as SUCCESSFUL!")
+        return "Success logged in the database."
 
     @function_tool
     async def escalate_to_human_teacher(
@@ -372,6 +383,22 @@ async def my_agent(ctx: JobContext):
         ),
     )
 
+    @ctx.room.on("disconnected")
+    def on_room_disconnect():
+        logger.info(f"Room {ctx.room.name} disconnected. Saving call outcome...")
+        db.record_call_outcome(
+            successful=assistant.successful_call, session_id=ctx.room.name
+        )
+
+    @ctx.room.on("participant_disconnected")
+    def on_participant_disconnect(participant: rtc.RemoteParticipant):
+        logger.info(
+            f"Participant {participant.identity} disconnected. Saving call outcome..."
+        )
+        db.record_call_outcome(
+            successful=assistant.successful_call, session_id=ctx.room.name
+        )
+
     # Join the room and connect to the user
     await ctx.connect()
 
@@ -418,7 +445,7 @@ async def my_agent(ctx: JobContext):
                     sip_call_to=phone_number,
                     room_name=ctx.room.name,
                     participant_identity="learner-phone",
-                    wait_until_answered=True
+                    wait_until_answered=True,
                 )
             )
             logger.info("Outbound call answered!")
@@ -430,15 +457,15 @@ async def my_agent(ctx: JobContext):
 
         # Wait a tiny bit for track routing to settle
         await asyncio.sleep(1.0)
-        
-        # Day 6 Mandatory Opening 
+
+        # Day 6 Mandatory Opening
         greeting = (
             "Hello, this is Shiksha AI calling for your daily English practice. "
             "If you would like me to stop calling you in the future, just let me know. "
             "Otherwise, are you ready to begin our practice?"
         )
         await session.say(greeting, allow_interruptions=False)
-        
+
     else:
         # INBOUND/WEB BROWSER FLOW
         # Dynamic Conditional Memory Greeting: Check SQLite for existing memory profiles

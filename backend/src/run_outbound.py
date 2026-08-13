@@ -1,11 +1,12 @@
+import argparse
 import asyncio
 import json
 import logging
 import os
-import argparse
+import uuid
+
 from dotenv import load_dotenv
 from livekit import api as lk_api
-import uuid
 
 # Load .env.local from backend directory
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env.local"))
@@ -13,9 +14,14 @@ load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env.local"))
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("run_outbound")
 
+
 async def main():
     parser = argparse.ArgumentParser(description="Trigger Day 6 outbound call")
-    parser.add_argument("--to", required=True, help="SIP URI (e.g. sip:yourname@sip.linphone.org) or phone number")
+    parser.add_argument(
+        "--to",
+        required=True,
+        help="SIP URI (e.g. sip:yourname@sip.linphone.org) or phone number",
+    )
     args = parser.parse_args()
 
     destination = args.to
@@ -33,9 +39,11 @@ async def main():
 
     # Pass the destination to the agent inside its dispatch metadata
     meta = {"phone_number": destination}
-    
-    logger.info(f"Dispatching Shiksha AI to room {room_name} with destination {destination}...")
-    
+
+    logger.info(
+        f"Dispatching Shiksha AI to room {room_name} with destination {destination}..."
+    )
+
     dispatch = await lk.agent_dispatch.create_dispatch(
         lk_api.CreateAgentDispatchRequest(
             agent_name="my-agent",
@@ -43,12 +51,17 @@ async def main():
             metadata=json.dumps(meta),
         )
     )
-    
+
     logger.info(f"Dispatched agent successfully (Dispatch ID: {dispatch.id})")
-    logger.info("The agent will now load (should take 2-4 seconds) and dial the destination.")
-    logger.info("Press Ctrl+C to exit this script. The call will continue until hung up.")
-    
+    logger.info(
+        "The agent will now load (should take 2-4 seconds) and dial the destination."
+    )
+    logger.info(
+        "Press Ctrl+C to exit this script. The call will continue until hung up."
+    )
+
     await lk.aclose()
+
 
 if __name__ == "__main__":
     asyncio.run(main())
