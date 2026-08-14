@@ -71,6 +71,12 @@ export const WelcomeView = ({
           >
             <span>👩‍🏫 Teacher Dashboard</span>
           </a>
+          <a
+            href="/dashboard"
+            className="inline-flex items-center gap-1.5 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3.5 py-1.5 text-xs font-semibold text-cyan-300 transition-all hover:border-cyan-500/50 hover:bg-cyan-500/20"
+          >
+            <span>📊 Telemetry Dashboard</span>
+          </a>
         </div>
 
         {/* Hero Title */}
@@ -131,6 +137,11 @@ export const WelcomeView = ({
             {isConnecting ? 'Connecting...' : 'Ready'}
           </span>
         </p>
+
+        {/* Day 9 Tip */}
+        <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-2 text-xs font-medium text-amber-200">
+          💡 <span className="font-semibold">Day 9 Tip:</span> Ask to practice "maths" or "numbers" to be transferred to the Maths Practice Specialist!
+        </div>
       </section>
 
       {/* Footer Info */}

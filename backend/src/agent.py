@@ -10,6 +10,7 @@ from livekit.agents import (
     Agent,
     AgentServer,
     AgentSession,
+    ChatContext,
     JobContext,
     JobProcess,
     RunContext,
@@ -96,6 +97,9 @@ CONVERSATION FLOW & DURATION:
 - Keep the practice conversation short and focused (about 3 turns of practice).
 - At the end of 3 turns, check in with the user: "We've completed a quick practice round! Would you like to continue practicing or wrap up for today?"
 
+SPECIALIST HANDOFF MANDATE (DAY 9):
+- If the learner asks to practice maths, numbers, arithmetic, addition, subtraction, multiplication, or division, YOU MUST IMMEDIATELY CALL `transfer_to_maths_specialist`.
+
 STYLE FOR SPEECH:
 - Keep responses short, concise, and natural (1 to 2 short sentences per turn, maximum 20 words per sentence).
 - Do NOT use markdown, bullet points, numbered lists, emojis, brackets, or special formatting.
@@ -103,6 +107,27 @@ STYLE FOR SPEECH:
 RECORDING SUCCESS (DAY 8):
 - If the learner successfully completes their practice, answers questions well, or finishes the requested topics, you MUST call `mark_exercise_completed` to log the successful outcome before wrapping up."""
 
+MATHS_PROMPT = """IDENTITY:
+You are the Maths Practice Specialist for Shiksha AI. Your job is ONLY to help children practice basic numbers, counting, and simple arithmetic (addition, subtraction, multiplication, division). 
+Be extremely warm, friendly, and encouraging. If they ask about English, gently remind them that you are the Maths Specialist and ask what math problem they want to solve."""
+
+class MathsSpecialistAgent(Agent):
+    def __init__(self, chat_ctx: ChatContext | None = None) -> None:
+        super().__init__(
+            instructions=MATHS_PROMPT,
+            chat_ctx=chat_ctx,
+            tts=murf.TTS(
+                voice="Samar",
+                style="Conversation",
+                tokenizer=tokenize.basic.SentenceTokenizer(min_sentence_len=2),
+                text_pacing=True,
+            ),
+        )
+
+    async def on_enter(self) -> None:
+        await self.session.generate_reply(
+            instructions="Introduce yourself warmly as the Maths Specialist and ask what numbers or math problem they would like to practice today."
+        )
 
 class Assistant(Agent):
     def __init__(self, room: rtc.Room | None = None) -> None:
@@ -116,6 +141,27 @@ class Assistant(Agent):
         self.successful_call = True
         logger.info("[Day 8] AI marked this session as SUCCESSFUL!")
         return "Success logged in the database."
+
+    @function_tool
+    async def transfer_to_maths_specialist(self, context: RunContext) -> tuple[Agent, str]:
+        """Transfer the user to the Maths Practice Specialist if they ask to practice math, arithmetic, or numbers."""
+        logger.info("[Day 9] Handing off to Maths Specialist...")
+        try:
+            payload = json.dumps(
+                {
+                    "type": "tool_result",
+                    "tool": "transfer_to_maths_specialist",
+                }
+            ).encode("utf-8")
+            if self.room and self.room.local_participant:
+                await self.room.local_participant.publish_data(payload, topic="tool_results")
+        except Exception as e:
+            logger.warning(f"Could not publish handoff tool_result payload: {e}")
+
+        specialist = MathsSpecialistAgent(
+            chat_ctx=self.chat_ctx.copy(exclude_instructions=True)
+        )
+        return specialist, "I will transfer you to our Maths Practice Specialist now. Hold on a moment please."
 
     @function_tool
     async def escalate_to_human_teacher(

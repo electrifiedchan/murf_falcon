@@ -456,6 +456,27 @@ export function AgentSessionView_01({
                       </div>
                     </div>
                   )}
+
+                  {activeToolCard.tool === 'transfer_to_maths_specialist' && (
+                    <div className="space-y-4 text-center pb-2">
+                      <div className="mx-auto flex h-16 w-16 items-center justify-center animate-pulse rounded-full border border-cyan-500/30 bg-cyan-500/20 p-4 shadow-[0_0_20px_rgba(6,182,212,0.3)]">
+                        <span className="text-2xl drop-shadow-md">🧮</span>
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-extrabold tracking-tight text-cyan-300">
+                          Transferring to Maths Specialist...
+                        </h3>
+                        <p className="text-muted-foreground mt-1 text-xs font-semibold leading-relaxed">
+                          Hold tight! Connecting you to Samar for your maths practice.
+                        </p>
+                      </div>
+                      <div className="px-8 pt-2">
+                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-cyan-950/60">
+                          <div className="h-full w-full animate-pulse bg-cyan-400" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             </div>
